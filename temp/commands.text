@@ -1,0 +1,6 @@
+python manage.py addsite sportchek --domain sportchek.ca --url https://www.sportchek.ca
+python manage.py addsite partycity --domain partycity.ca --url https://www.partycity.ca
+python manage.py addsite candiantire --domain candiantire.ca --url https://www.candiantire.ca
+python manage.py addsite marks --domain marks.com --url https://www.marks.com
+python manage.py addsite atmosphere --domain atmosphere.com --url https://www.atmosphere.ca/en
+
