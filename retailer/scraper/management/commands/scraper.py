@@ -1,6 +1,6 @@
-from django.core.management.base import BaseCommand, CommandError, CommandParser
-from scraper.models import Website, Category, Product
+from django.core.management.base import BaseCommand, CommandParser
 from .extractor.canadiantire import CandianTireScraper
+from .extractor.kmstools import KmstoolsScraper
 
 class Command(BaseCommand):
     help = "Scrape all categories and products from other site"
@@ -68,6 +68,14 @@ class Command(BaseCommand):
                 "store": "243",
                 "apikey": "c01ef3612328420c9f5cd9277e815a0e",
                 "apiroot": "https://apim.atmosphere.ca",
+            })
+        elif site_name == "kmstools":
+            scraper = KmstoolsScraper()
+            scraper.set_settings({
+                "name": "kmstools",
+                "domain": "kmstools.com",
+                "url": "https://www.kmstools.com",
+                "label": "kmstools",
             })
         else:
             print(f"scraper script for {site_name} not found")
