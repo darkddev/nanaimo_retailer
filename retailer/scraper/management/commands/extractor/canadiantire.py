@@ -52,8 +52,11 @@ class CandianTireScraper:
         return result.get("categories", [])
 
     def extract_products(self, category, page):
+        url = f"{self.settings["apiroot"]}{API_LOAD_PRODUCT}?store={self.settings['store']}"
+        if page > 1:
+            url += f";page={page}"
         resp = self.session.get(
-            f"{self.settings["apiroot"]}{API_LOAD_PRODUCT}", 
+            url, 
             headers = {
                 "Ocp-Apim-Subscription-Key" : self.settings["apikey"],
                 "Bannerid": self.settings["id"],
@@ -63,7 +66,6 @@ class CandianTireScraper:
                 "Categorylevel": f"ast-id-level-{category.level}",
                 "Count": "100",
             },
-            params = {"store" : self.settings['store'] if page == 1 else f"{self.settings['store']};page={page}"},
             timeout = API_TIMEOUT
         )
         return resp.json()
@@ -172,8 +174,9 @@ class CandianTireScraper:
         for product_info in result.get("products", []):
             try:
                 self.create_product(site, category, product_info)
-            except:
-                pass
+            except Exception as e:
+                # print(e)
+                raise e
         return result["pagination"]["total"]
 
     def create_product(self, site, category, product_info):
@@ -218,12 +221,13 @@ class CandianTireScraper:
                         attrs[attr["key"]] = attr["value"]
                     sku_attrs_map[sku["code"]] = attrs
             ret = self.extract_price(skus)
+            prods = ret["skus"]
             if is_variant:
                 variants = []
-                for sku in ret["skus"]:
+                for sku in prods:
                     variant = {}
                     variant["sku"] = sku["code"]
-                    if "originalPrice" in sku and "value" in sku["originalPrice"] and sku["originalPrice"]["value"] is not None:
+                    if "originalPrice" in sku and sku["originalPrice"] is not None and "value" in sku["originalPrice"] and sku["originalPrice"]["value"] is not None:
                         variant["regular_price"] = sku["originalPrice"]["value"]
                     else:
                         variant["regular_price"] = 0
@@ -257,8 +261,8 @@ class CandianTireScraper:
                     variants = json.dumps(variants),
                 )
             else:
-                sku = ret["skus"][0]
-                if "originalPrice" in sku and "value" in sku["originalPrice"] and sku["originalPrice"]["value"] is not None:
+                sku = prods[0]
+                if "originalPrice" in sku and sku["originalPrice"] is not None and "value" in sku["originalPrice"] and sku["originalPrice"]["value"] is not None:
                     regular_price = sku["originalPrice"]["value"]
                 else:
                     regular_price = 0

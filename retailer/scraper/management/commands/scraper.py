@@ -53,7 +53,7 @@ class Command(BaseCommand):
                 "url": "https://www.canadiantire.ca",
                 "label": "CanadianTire",
                 "id": "CTR",
-                "store": "144",
+                "store": "179",
                 "apikey": "c01ef3612328420c9f5cd9277e815a0e",
                 "apiroot": "https://apim.canadiantire.ca",
             })
