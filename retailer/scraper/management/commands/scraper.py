@@ -21,6 +21,22 @@ class Command(BaseCommand):
                 "apikey": "c01ef3612328420c9f5cd9277e815a0e",
                 "apiroot": "https://apim.sportchek.ca",
             })
+        elif site_name == "deal_sportcheck":
+            scraper = CandianTireScraper()
+            scraper.set_settings({
+                "name": "sportchek",
+                "domain": "sportchek.ca",
+                "url": "https://www.sportchek.ca",
+                "label": "SportChek",
+                "id": "SC",
+                "store": "290",
+                "apikey": "c01ef3612328420c9f5cd9277e815a0e",
+                "apiroot": "https://apim.sportchek.ca",
+                "action": "deal",
+                "query" : "saleclearance",
+                "experience" : "sale|clearance",
+                "widgetid" : 1
+            })
         elif site_name == "partycity":
             scraper = CandianTireScraper()
             scraper.set_settings({
@@ -45,6 +61,20 @@ class Command(BaseCommand):
                 "apikey": "c01ef3612328420c9f5cd9277e815a0e",
                 "apiroot": "https://apim.marks.com",
             })
+        elif site_name == "deal_marks":
+            scraper = CandianTireScraper()
+            scraper.set_settings({
+                "name": "marks",
+                "domain": "marks.com",
+                "url": "https://www.marks.com",
+                "label": "Marks",
+                "id": "MKS",
+                "store": "208",
+                "apikey": "c01ef3612328420c9f5cd9277e815a0e",
+                "apiroot": "https://apim.marks.com",
+                "action":"deal",
+                "query": "sale",
+            })
         elif site_name == "canadiantire":
             scraper = CandianTireScraper()
             scraper.set_settings({
@@ -57,6 +87,20 @@ class Command(BaseCommand):
                 "apikey": "c01ef3612328420c9f5cd9277e815a0e",
                 "apiroot": "https://apim.canadiantire.ca",
             })
+        elif site_name == "deal_canadiantire":
+            scraper = CandianTireScraper()
+            scraper.set_settings({
+                "name": "canadiantire",
+                "domain": "canadiantire.ca",
+                "url": "https://www.canadiantire.ca",
+                "label": "CanadianTire",
+                "id": "CTR",
+                "store": "365",
+                "apikey": "c01ef3612328420c9f5cd9277e815a0e",
+                "apiroot": "https://apim.canadiantire.ca",
+                "experience": "sale",
+                "hidefacets": "deals"
+            })
         elif site_name == "atmosphere":
             scraper = CandianTireScraper()
             scraper.set_settings({
@@ -68,6 +112,20 @@ class Command(BaseCommand):
                 "store": "243",
                 "apikey": "c01ef3612328420c9f5cd9277e815a0e",
                 "apiroot": "https://apim.atmosphere.ca",
+            })
+        elif site_name == "deal_atmosphere":
+            scraper = CandianTireScraper()
+            scraper.set_settings({
+                "name": "atmosphere",
+                "domain": "atmosphere.ca",
+                "url": "https://www.atmosphere.ca",
+                "label": "Atmosphere",
+                "id": "ATM",
+                "store": "7403",
+                "apikey": "c01ef3612328420c9f5cd9277e815a0e",
+                "apiroot": "https://apim.atmosphere.ca",
+                "experience" : "sale|clearance",
+                "widgetid" : "2jn4vze9"
             })
         elif site_name == "kmstools":
             scraper = KmstoolsScraper()

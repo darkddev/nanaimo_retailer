@@ -52,6 +52,8 @@ class Product(models.Model):
     attributes = models.TextField(null=True, blank=True)
     variants = models.TextField(null=True, blank=True)
 
+    is_deal = models.BooleanField(null=True, blank=True)
+    
     class Meta:
         db_table = 'wp_products'
 
