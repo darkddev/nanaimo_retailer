@@ -265,10 +265,6 @@ class CandianTireScraper:
                     self.create_product(site, category, product_info)
                 except Exception as e:
                     print(e)
-<<<<<<< HEAD
-=======
-                    pass
->>>>>>> 95e0efd0660bf829e442d11a88f7cc9ea887e146
             return result["pagination"]["total"]
         except:
             print("Retrying to get products")
