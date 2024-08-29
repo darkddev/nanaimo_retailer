@@ -3,12 +3,13 @@ import json
 from scraper.models import Website, Category, Product
 
 LANG = "en_CA"
-USER_AGENT = "PostmanRuntime/7.39.0"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0"
+# USER_AGENT = "PostmanRuntime/7.39.0"
 API_LOAD_CATEGORY = "/v1/category/api/v1/categories"
 API_LOAD_PRODUCT = "/v1/search/search"
 API_GET_PRODUCT = "/v1/product/api/v1/product/productFamily"
 API_GET_PRICE = "/v1/product/api/v1/product/sku/PriceAvailability"
-API_TIMEOUT = 100000
+API_TIMEOUT = 10000
 
 class CandianTireScraper:
     def __init__(self) -> None:
@@ -16,7 +17,6 @@ class CandianTireScraper:
         self.session = requests.session()
         self.category_count = 0
         self.product_count = 0
-        pass
     
     def create_site(self, name, domain, url):
         try:
@@ -29,7 +29,7 @@ class CandianTireScraper:
             raise e
 
     def set_settings(self, settings):
-        for key in ["name", "domain", "url", "label", "id", "store", "apikey", "apiroot", "action"]:
+        for key in ["name", "domain", "url", "label", "id", "store", "apikey", "apiroot"]:
             if key not in settings:
                 print(f"{key} is absent in settings")
                 return False
@@ -65,13 +65,10 @@ class CandianTireScraper:
                 "Categorycode": category.orig_id,
                 "Categorylevel": f"ast-id-level-{category.level}",
                 "Count": "100",
-                "Q" : self.settings.get("query", None),
-                "experience" : self.settings.get("experience", None),
-                "widgetid" : self.settings.get("widgetid", None),
-                "hidefacets" : self.settings.get("hidefacets",None),
             },
             timeout = API_TIMEOUT
         )
+        print(resp.status_code)
         return resp.json()
 
     def extract_product(self, code):
@@ -94,7 +91,7 @@ class CandianTireScraper:
     def extract_price(self, skus):
         sku_params = []
         for sku in skus:
-            sku_params.append({"code": sku, "lowStockThreshold": "0"})
+            sku_params.append({"code": str(sku), "lowStockThreshold": "0"})
         resp = self.session.post(
             f"{self.settings["apiroot"]}{API_GET_PRICE}", 
             headers = {
@@ -172,112 +169,138 @@ class CandianTireScraper:
             page += 1
 
     def create_products_for_page(self, site, category, page):
-        result = self.extract_products(category, page)
-        print(result["pagination"]["total"], ":", result["resultCount"], ":", len(result["products"]))
-        for product_info in result.get("products", []):
-            try:
-                self.create_product(site, category, product_info)
-            except Exception as e:
-                # print(e)
-                raise e
-        return result["pagination"]["total"]
+        try:
+            result = self.extract_products(category, page)
+            print(result["pagination"]["total"], ":", result["resultCount"], ":", len(result["products"]))
+            for product_info in result.get("products", []):
+                try:
+                    self.create_product(site, category, product_info)
+                except Exception as e:
+                    print(e)
+            return result["pagination"]["total"]
+        except:
+            print("Retrying to get products")
+            self.create_products_for_page(site, category, page)
+            return result["pagination"]["total"]
 
     def create_product(self, site, category, product_info):
         try:
             product = Product.objects.get(site=site, orig_id=product_info["code"])
-            if self.settings.get('action', None) == 'deal':
-                is_deal = True
-            else:
-                is_deal = False
             
-            result = self.extract_product(product_info["code"])
+            # result = self.extract_product(product_info["code"])
+            
+            # is_variant = False
+            # if "options" in result:
+            #     is_variant = len(result["options"]) > 0
+            #     attributes = {}
+            #     optionid_attr_maps = {}
+            #     for option in result["options"]:
+            #         values = []
+            #         for value in option["values"]:
+            #             optionid_attr_maps[value["id"]] = {"key" : option["display"], "value":value["value"]}
+            #             values.append(value["value"])
+            #         attributes[option["display"]] = values
 
-            is_variant = False
 
-            if "options" in result:
-                is_variant = len(result["options"]) > 0
-                attributes = {}
-                optionid_attr_maps = {}
-                for option in result["options"]:
-                    values = []
-                    for value in option["values"]:
-                        optionid_attr_maps[value["id"]] = {"key" : option["display"], "value":value["value"]}
-                        values.append(value["value"])
-                    attributes[option["display"]] = values
 
-            skus = []
-            sku_attrs_map = {}
-            if "skus" in result:
-                for sku in result["skus"]:
-                    skus.append(sku["code"])
-                    attrs = {}             
-                    for optionid in sku["optionIds"]:
-                        attr = optionid_attr_maps[optionid]
-                        attrs[attr["key"]] = attr["value"]
-                    sku_attrs_map[sku["code"]] = attrs
-            ret = self.extract_price(skus)
-            prods = ret["skus"]
+            
+            # skus = product.skus.split(",")
+            # sku_params = []
+            # for sku in skus:
+            #     sku_params.append({"code": str(sku), "lowStockThreshold": "0"})
+            # resp = self.session.post(
+            #     f"{self.settings["apiroot"]}{API_GET_PRICE}", 
+            #     headers = {
+            #         "Ocp-Apim-Subscription-Key" : self.settings["apikey"],
+            #         "Basesiteid": self.settings["id"],
+            #         "Bannerid": self.settings["id"],
+            #         "User-Agent": USER_AGENT
+            #     },
+            #     params = {
+            #         "cache": "true",
+            #         "lang": LANG,
+            #         "storeId": self.settings["store"]
+            #     },
+            #     json= { "skus":sku_params },
+            #     timeout = API_TIMEOUT
+            # )
+            # result = resp.json()
+            # prods = result["skus"]
 
-            if is_variant:
-                variants = []
-                for sku in prods:
-                    variant = {}
-                    variant["sku"] = sku["code"]
-                    if "originalPrice" in sku and sku["originalPrice"] is not None and "value" in sku["originalPrice"] and sku["originalPrice"]["value"] is not None:
-                        variant["regular_price"] = sku["originalPrice"]["value"]
-                    else:
-                        variant["regular_price"] = 0
-                    if "currentPrice" in sku and "value" in sku["currentPrice"] and sku["currentPrice"]["value"] is not None:
-                        variant["sale_price"] = sku["currentPrice"]["value"]
-                    else:
-                        variant["sale_price"] = 0
-                    if "fulfillment" in sku and "availability" in sku["fulfillment"] and "Corporate" in sku["fulfillment"]["availability"] and "Quantity" in sku["fulfillment"]["availability"]["Corporate"]:
-                        variant["stock"] = sku["fulfillment"]["availability"]["Corporate"]["Quantity"]
-                    elif "fulfillment" in sku and "availability" in sku["fulfillment"] and "quantity" in sku["fulfillment"]["availability"]:
-                        variant["stock"] = sku["fulfillment"]["availability"]["Corporate"]["Quantity"]
-                    else:
-                        variant["stock"] = 0
-                    variant["attributes"] = sku_attrs_map[sku["code"]]
-                    variants.append(variant)
-                Product.objects.filter(
-                        site=site,
-                        orig_id=product_info["code"]
-                    ).update(
-                        skus = ",".join(skus),
-                        attributes = json.dumps(attributes),
-                        variants = json.dumps(variants),
-                        is_deal = is_deal,
-                    )
-            else:
-                sku = prods[0]
-                if "originalPrice" in sku and sku["originalPrice"] is not None and "value" in sku["originalPrice"] and sku["originalPrice"]["value"] is not None:
-                    regular_price = sku["originalPrice"]["value"]
-                else:
-                    regular_price = 0
-                if "currentPrice" in sku and "value" in sku["currentPrice"] and sku["currentPrice"]["value"] is not None:
-                    sale_price = sku["currentPrice"]["value"]
-                else:
-                    sale_price = 0
-                if "fulfillment" in sku and "availability" in sku["fulfillment"] and "Corporate" in sku["fulfillment"]["availability"] and "Quantity" in sku["fulfillment"]["availability"]["Corporate"]:
-                    stock = sku["fulfillment"]["availability"]["Corporate"]["Quantity"]
-                elif "fulfillment" in sku and "availability" in sku["fulfillment"] and "quantity" in sku["fulfillment"]["availability"]:
-                    stock = sku["fulfillment"]["availability"]["Corporate"]["Quantity"]
-                else:
-                    stock = 0
+            # if product.is_variant:
+            #     try:
+            #         old_variants = json.loads((product.variants).replace("'", '"'))
+            #     except json.JSONDecodeError as e:
+            #         old_variants = []
+            #     new_variants = []
+
+            #     for sku_value in prods:
+            #         for variant in old_variants:
+            #             if variant["sku"] == sku_value["code"]:
+            #                 if "originalPrice" in sku_value and sku_value["originalPrice"] is not None and "value" in sku_value["originalPrice"] and sku_value["originalPrice"]["value"] is not None:
+            #                     variant["regular_price"] = sku_value["originalPrice"]["value"]
+            #                 else:
+            #                     variant["regular_price"] = 0
+            #                 if "currentPrice" in sku_value and "value" in sku_value["currentPrice"] and sku_value["currentPrice"]["value"] is not None:
+            #                     variant["sale_price"] = sku_value["currentPrice"]["value"]
+            #                 else:
+            #                     variant["sale_price"] = 0
+            #                 if "fulfillment" in sku_value and "availability" in sku_value["fulfillment"] and "Corporate" in sku_value["fulfillment"]["availability"] and "Quantity" in sku_value["fulfillment"]["availability"]["Corporate"]:
+            #                     variant["stock"] = sku_value["fulfillment"]["availability"]["Corporate"]["Quantity"]
+            #                 elif "fulfillment" in sku_value and "availability" in sku_value["fulfillment"] and "quantity" in sku_value["fulfillment"]["availability"]:
+            #                     variant["stock"] = sku_value["fulfillment"]["availability"]["Corporate"]["Quantity"]
+            #                 else:
+            #                     variant["stock"] = 0    
+                            
+            #                 new_variants.append(variant)
+
+            #     Product.objects.filter( site = site, orig_id = product.orig_id ).update( variants = new_variants )  
                 
-                Product.objects.filter(
-                        site=site,
-                        orig_id=product_info["code"]
-                    ).update(
-                        skus = ",".join(skus),
-                        regular_price = regular_price,
-                        sale_price = sale_price,
-                        stock = stock,
-                        is_deal = is_deal
-                    )
-            
+            #     # resp = self.session.post( 
+            #     #         url = "https://wwmalls.com/wp-json/admin/non-compliant/update-deal-price",
+            #     #         params={
+            #     #             'orig_id' : product.orig_id,
+            #     #             'site_id' : site.name
+            #     #         }
+            #     #     )
+            #     # print(resp.text)
+            # else:
+            #     sku_value = prods[0]
+            #     if "originalPrice" in sku_value and sku_value["originalPrice"] is not None and "value" in sku_value["originalPrice"] and sku_value["originalPrice"]["value"] is not None:
+            #         regular_price = sku_value["originalPrice"]["value"]
+            #     else:
+            #         regular_price = 0
+            #     if "currentPrice" in sku_value and "value" in sku_value["currentPrice"] and sku_value["currentPrice"]["value"] is not None:
+            #         sale_price = sku_value["currentPrice"]["value"]
+            #     else:
+            #         sale_price = 0
+            #     if "fulfillment" in sku_value and "availability" in sku_value["fulfillment"] and "Corporate" in sku_value["fulfillment"]["availability"] and "Quantity" in sku_value["fulfillment"]["availability"]["Corporate"]:
+            #         stock = sku_value["fulfillment"]["availability"]["Corporate"]["Quantity"]
+            #     elif "fulfillment" in sku_value and "availability" in sku_value["fulfillment"] and "quantity" in sku_value["fulfillment"]["availability"]:
+            #         stock = sku_value["fulfillment"]["availability"]["Corporate"]["Quantity"]
+            #     else:
+            #         stock = 0
+                
+            #     Product.objects.filter(
+            #         site = site,
+            #         orig_id = product.orig_id
+            #     ).update(
+            #         regular_price = regular_price,
+            #         sale_price = sale_price,
+            #         stock = stock,
+            #     )
+            #     # resp = self.session.post( 
+            #     #         url = "https://wwmalls.com/wp-json/admin/non-compliant/update-deal-price",
+            #     #         params={
+            #     #             'orig_id' : product.orig_id,
+            #     #             'site_id' : site.name
+            #     #         }
+            #     #     )
+            #     # print(resp.text)
+
             self.product_count += 1
-            print(f"--- UPDATE PRODUCT PRICE {self.product_count} : {product.name}")
+            
+            print(f"---Existing Product {self.product_count} : {product.name} was updated ")
         except Product.DoesNotExist:
             result = self.extract_product(product_info["code"])
             features = []
@@ -317,11 +340,6 @@ class CandianTireScraper:
             ret = self.extract_price(skus)
             prods = ret["skus"]
 
-            if self.settings.get('action', None) == 'deal':
-                is_deal = True
-            else:
-                is_deal = False
-
             if is_variant:
                 variants = []
                 for sku in prods:
@@ -359,8 +377,16 @@ class CandianTireScraper:
                     status = "off",
                     attributes = json.dumps(attributes),
                     variants = json.dumps(variants),
-                    is_deal = is_deal,
+                    is_deal = False
                 )
+                # resp = self.session.post( 
+                #         url = "https://wwmalls.com/wp-json/admin/non-compliant/update-deal-price",
+                #         params={
+                #             'orig_id' : product_info["code"],
+                #             'site_id' : site.name
+                #         }
+                #     )
+                # print(resp.text)
             else:
                 sku = prods[0]
                 if "originalPrice" in sku and sku["originalPrice"] is not None and "value" in sku["originalPrice"] and sku["originalPrice"]["value"] is not None:
@@ -394,11 +420,18 @@ class CandianTireScraper:
                     regular_price = regular_price,
                     sale_price = sale_price,
                     stock = stock,
-                    is_deal = is_deal
+                    is_deal = False
                 )
+                # resp = self.session.post( 
+                #         url = "https://wwmalls.com/wp-json/admin/non-compliant/update-deal-price",
+                #         params={
+                #             'orig_id' : product_info["code"],
+                #             'site_id' : site.name
+                #         }
+                #     )
+                # print(resp.text)
             self.product_count += 1
             print(f"+++ PRODUCT {self.product_count} : {result["name"]}")
-            # print(f"+++ PRODUCT {self.product_count} : {self.settings["url"]}{result["canonicalUrl"]}")
             
         except Exception as e:
             raise e
