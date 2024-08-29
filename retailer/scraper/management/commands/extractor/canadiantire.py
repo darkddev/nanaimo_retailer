@@ -147,6 +147,94 @@ class CandianTireScraper:
             self.create_category(site, cat_info, 1)
     
     def create_products_for_site(self, site):
+        
+        if self.settings.get('action', None) == 'deal':
+            # update old deal products price with sku and is_deal
+            print("Updating old deal price...")
+            old_deal_products = Product.objects.filter(site=site, is_deal = True )
+            for old_deal_product in old_deal_products:
+                result = self.extract_product(old_deal_product.orig_id)
+                if "options" in result:
+                    is_variant = len(result["options"]) > 0
+                    attributes = {}
+                    optionid_attr_maps = {}
+                    for option in result["options"]:
+                        values = []
+                        for value in option["values"]:
+                            optionid_attr_maps[value["id"]] = {"key" : option["display"], "value":value["value"]}
+                            values.append(value["value"])
+                        attributes[option["display"]] = values
+
+                sku_attrs_map = {}
+                if "skus" in result:
+                    for sku in result["skus"]:
+                        attrs = {}             
+                        for optionid in sku["optionIds"]:
+                            attr = optionid_attr_maps[optionid]
+                            attrs[attr["key"]] = attr["value"]
+                        sku_attrs_map[sku["code"]] = attrs
+            
+                skus = old_deal_product.skus.split(",")
+                ret = self.extract_price(skus)
+                prods = ret["skus"]  
+                
+                if old_deal_product.is_variant:
+                    variants = []
+                    for sku in prods:
+                        variant = {}
+                        variant["sku"] = sku["code"]
+                        if "originalPrice" in sku and sku["originalPrice"] is not None and "value" in sku["originalPrice"] and sku["originalPrice"]["value"] is not None:
+                            variant["regular_price"] = sku["originalPrice"]["value"]
+                        else:
+                            variant["regular_price"] = 0
+                        if "currentPrice" in sku and "value" in sku["currentPrice"] and sku["currentPrice"]["value"] is not None:
+                            variant["sale_price"] = sku["currentPrice"]["value"]
+                        else:
+                            variant["sale_price"] = 0
+                        if "fulfillment" in sku and "availability" in sku["fulfillment"] and "Corporate" in sku["fulfillment"]["availability"] and "Quantity" in sku["fulfillment"]["availability"]["Corporate"]:
+                            variant["stock"] = sku["fulfillment"]["availability"]["Corporate"]["Quantity"]
+                        elif "fulfillment" in sku and "availability" in sku["fulfillment"] and "quantity" in sku["fulfillment"]["availability"]:
+                            variant["stock"] = sku["fulfillment"]["availability"]["Corporate"]["Quantity"]
+                        else:
+                            variant["stock"] = 0
+                        variant["attributes"] = sku_attrs_map[sku["code"]]
+                        variants.append(variant)
+                    Product.objects.filter(
+                            site=site,
+                            orig_id=old_deal_product.orig_id
+                        ).update(
+                            skus = ",".join(skus),
+                            variants = json.dumps(variants),
+                            is_deal = False,
+                        )
+                else:
+                    sku = prods[0]
+                    if "originalPrice" in sku and sku["originalPrice"] is not None and "value" in sku["originalPrice"] and sku["originalPrice"]["value"] is not None:
+                        regular_price = sku["originalPrice"]["value"]
+                    else:
+                        regular_price = 0
+                    if "currentPrice" in sku and "value" in sku["currentPrice"] and sku["currentPrice"]["value"] is not None:
+                        sale_price = sku["currentPrice"]["value"]
+                    else:
+                        sale_price = 0
+                    if "fulfillment" in sku and "availability" in sku["fulfillment"] and "Corporate" in sku["fulfillment"]["availability"] and "Quantity" in sku["fulfillment"]["availability"]["Corporate"]:
+                        stock = sku["fulfillment"]["availability"]["Corporate"]["Quantity"]
+                    elif "fulfillment" in sku and "availability" in sku["fulfillment"] and "quantity" in sku["fulfillment"]["availability"]:
+                        stock = sku["fulfillment"]["availability"]["Corporate"]["Quantity"]
+                    else:
+                        stock = 0
+                    
+                    Product.objects.filter(
+                            site=site,
+                            orig_id=old_deal_product.orig_id
+                        ).update(
+                            skus = ",".join(skus),
+                            regular_price = regular_price,
+                            sale_price = sale_price,
+                            stock = stock,
+                            is_deal = False
+                        )              
+
         categories = Category.objects.filter(site=site, parent=None)
         for category in categories:
             self.load_products_for_category(site, category)
@@ -177,6 +265,10 @@ class CandianTireScraper:
                     self.create_product(site, category, product_info)
                 except Exception as e:
                     print(e)
+<<<<<<< HEAD
+=======
+                    pass
+>>>>>>> 95e0efd0660bf829e442d11a88f7cc9ea887e146
             return result["pagination"]["total"]
         except:
             print("Retrying to get products")

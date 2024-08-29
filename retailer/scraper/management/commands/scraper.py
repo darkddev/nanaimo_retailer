@@ -174,6 +174,7 @@ class Command(BaseCommand):
                 "store": "7403",
                 "apikey": "c01ef3612328420c9f5cd9277e815a0e",
                 "apiroot": "https://apim.atmosphere.ca",
+                "action":"deal",
                 "experience" : "sale|clearance",
                 "widgetid" : "2jn4vze9"
             })
