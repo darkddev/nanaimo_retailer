@@ -8,7 +8,7 @@ API_LOAD_CATEGORY = "/v1/category/api/v1/categories"
 API_LOAD_PRODUCT = "/v1/search/search"
 API_GET_PRODUCT = "/v1/product/api/v1/product/productFamily"
 API_GET_PRICE = "/v1/product/api/v1/product/sku/PriceAvailability"
-API_TIMEOUT = 100000
+API_TIMEOUT = 10000
 
 class CandianTireScraper:
     def __init__(self) -> None:
@@ -16,7 +16,6 @@ class CandianTireScraper:
         self.session = requests.session()
         self.category_count = 0
         self.product_count = 0
-        pass
     
     def create_site(self, name, domain, url):
         try:
@@ -29,7 +28,7 @@ class CandianTireScraper:
             raise e
 
     def set_settings(self, settings):
-        for key in ["name", "domain", "url", "label", "id", "store", "apikey", "apiroot", "action"]:
+        for key in ["name", "domain", "url", "label", "id", "store", "apikey", "apiroot"]:
             if key not in settings:
                 print(f"{key} is absent in settings")
                 return False
@@ -72,6 +71,7 @@ class CandianTireScraper:
             },
             timeout = API_TIMEOUT
         )
+        print(resp.status_code)
         return resp.json()
 
     def extract_product(self, code):
@@ -94,7 +94,7 @@ class CandianTireScraper:
     def extract_price(self, skus):
         sku_params = []
         for sku in skus:
-            sku_params.append({"code": sku, "lowStockThreshold": "0"})
+            sku_params.append({"code": str(sku), "lowStockThreshold": "0"})
         resp = self.session.post(
             f"{self.settings["apiroot"]}{API_GET_PRICE}", 
             headers = {
@@ -150,6 +150,94 @@ class CandianTireScraper:
             self.create_category(site, cat_info, 1)
     
     def create_products_for_site(self, site):
+        
+        if self.settings.get('action', None) == 'deal':
+            # update old deal products price with sku and is_deal
+            print("Updating old deal price...")
+            old_deal_products = Product.objects.filter(site=site, is_deal = True )
+            for old_deal_product in old_deal_products:
+                result = self.extract_product(old_deal_product.orig_id)
+                if "options" in result:
+                    is_variant = len(result["options"]) > 0
+                    attributes = {}
+                    optionid_attr_maps = {}
+                    for option in result["options"]:
+                        values = []
+                        for value in option["values"]:
+                            optionid_attr_maps[value["id"]] = {"key" : option["display"], "value":value["value"]}
+                            values.append(value["value"])
+                        attributes[option["display"]] = values
+
+                sku_attrs_map = {}
+                if "skus" in result:
+                    for sku in result["skus"]:
+                        attrs = {}             
+                        for optionid in sku["optionIds"]:
+                            attr = optionid_attr_maps[optionid]
+                            attrs[attr["key"]] = attr["value"]
+                        sku_attrs_map[sku["code"]] = attrs
+            
+                skus = old_deal_product.skus.split(",")
+                ret = self.extract_price(skus)
+                prods = ret["skus"]  
+                
+                if old_deal_product.is_variant:
+                    variants = []
+                    for sku in prods:
+                        variant = {}
+                        variant["sku"] = sku["code"]
+                        if "originalPrice" in sku and sku["originalPrice"] is not None and "value" in sku["originalPrice"] and sku["originalPrice"]["value"] is not None:
+                            variant["regular_price"] = sku["originalPrice"]["value"]
+                        else:
+                            variant["regular_price"] = 0
+                        if "currentPrice" in sku and "value" in sku["currentPrice"] and sku["currentPrice"]["value"] is not None:
+                            variant["sale_price"] = sku["currentPrice"]["value"]
+                        else:
+                            variant["sale_price"] = 0
+                        if "fulfillment" in sku and "availability" in sku["fulfillment"] and "Corporate" in sku["fulfillment"]["availability"] and "Quantity" in sku["fulfillment"]["availability"]["Corporate"]:
+                            variant["stock"] = sku["fulfillment"]["availability"]["Corporate"]["Quantity"]
+                        elif "fulfillment" in sku and "availability" in sku["fulfillment"] and "quantity" in sku["fulfillment"]["availability"]:
+                            variant["stock"] = sku["fulfillment"]["availability"]["Corporate"]["Quantity"]
+                        else:
+                            variant["stock"] = 0
+                        variant["attributes"] = sku_attrs_map[sku["code"]]
+                        variants.append(variant)
+                    Product.objects.filter(
+                            site=site,
+                            orig_id=old_deal_product.orig_id
+                        ).update(
+                            skus = ",".join(skus),
+                            variants = json.dumps(variants),
+                            is_deal = False,
+                        )
+                else:
+                    sku = prods[0]
+                    if "originalPrice" in sku and sku["originalPrice"] is not None and "value" in sku["originalPrice"] and sku["originalPrice"]["value"] is not None:
+                        regular_price = sku["originalPrice"]["value"]
+                    else:
+                        regular_price = 0
+                    if "currentPrice" in sku and "value" in sku["currentPrice"] and sku["currentPrice"]["value"] is not None:
+                        sale_price = sku["currentPrice"]["value"]
+                    else:
+                        sale_price = 0
+                    if "fulfillment" in sku and "availability" in sku["fulfillment"] and "Corporate" in sku["fulfillment"]["availability"] and "Quantity" in sku["fulfillment"]["availability"]["Corporate"]:
+                        stock = sku["fulfillment"]["availability"]["Corporate"]["Quantity"]
+                    elif "fulfillment" in sku and "availability" in sku["fulfillment"] and "quantity" in sku["fulfillment"]["availability"]:
+                        stock = sku["fulfillment"]["availability"]["Corporate"]["Quantity"]
+                    else:
+                        stock = 0
+                    
+                    Product.objects.filter(
+                            site=site,
+                            orig_id=old_deal_product.orig_id
+                        ).update(
+                            skus = ",".join(skus),
+                            regular_price = regular_price,
+                            sale_price = sale_price,
+                            stock = stock,
+                            is_deal = False
+                        )              
+
         categories = Category.objects.filter(site=site, parent=None)
         for category in categories:
             self.load_products_for_category(site, category)
@@ -172,15 +260,20 @@ class CandianTireScraper:
             page += 1
 
     def create_products_for_page(self, site, category, page):
-        result = self.extract_products(category, page)
-        print(result["pagination"]["total"], ":", result["resultCount"], ":", len(result["products"]))
-        for product_info in result.get("products", []):
-            try:
-                self.create_product(site, category, product_info)
-            except Exception as e:
-                # print(e)
-                raise e
-        return result["pagination"]["total"]
+        try:
+            result = self.extract_products(category, page)
+            print(result["pagination"]["total"], ":", result["resultCount"], ":", len(result["products"]))
+            for product_info in result.get("products", []):
+                try:
+                    self.create_product(site, category, product_info)
+                except Exception as e:
+                    print(e)
+                    pass
+            return result["pagination"]["total"]
+        except:
+            print("Retrying to get products")
+            self.create_products_for_page(site, category, page)
+            return result["pagination"]["total"]
 
     def create_product(self, site, category, product_info):
         try:
@@ -398,7 +491,6 @@ class CandianTireScraper:
                 )
             self.product_count += 1
             print(f"+++ PRODUCT {self.product_count} : {result["name"]}")
-            # print(f"+++ PRODUCT {self.product_count} : {self.settings["url"]}{result["canonicalUrl"]}")
             
         except Exception as e:
             raise e

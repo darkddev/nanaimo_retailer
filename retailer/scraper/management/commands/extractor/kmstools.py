@@ -168,8 +168,11 @@ class KmstoolsScraper:
                     data_images = gallery_data['[data-gallery-role=gallery-placeholder]']['mage/gallery/gallery']['data'] 
                     for data_image in data_images:
                         images.append(data_image['img'])
-            if not self.html_tree.cssselect('#maincontent')[0].cssselect('div.columns')[0].cssselect('div.main')[0].cssselect('div.product-info-main'):
-                print("------ 404")
+            try:
+                if not self.html_tree.cssselect('#maincontent')[0].cssselect('div.columns')[0].cssselect('div.main')[0].cssselect('div.product-info-main'):
+                    print("------ 404")
+                    return
+            except:
                 return
             if self.html_tree.cssselect('#maincontent')[0].cssselect('div.columns')[0].cssselect('div.main')[0].cssselect('div.product-info-main')[0].cssselect('div.product-info-price')[0].cssselect('span.old-price') and len(self.html_tree.cssselect('#maincontent')[0].cssselect('div.columns')[0].cssselect('div.main')[0].cssselect('div.product-info-main')[0].cssselect('div.product-info-price')[0].cssselect('span.old-price')[0].cssselect('span.price-container')) > 0:
                 regular_price = self.html_tree.cssselect('#maincontent')[0].cssselect('div.columns')[0].cssselect('div.main')[0].cssselect('div.product-info-main')[0].cssselect('div.product-info-price')[0].cssselect('div.price-box')[0].cssselect('span.old-price')[0].cssselect('span.price-container')[0].cssselect('span.price-wrapper')[0].text_content().strip().replace("$", "").replace(",", "")

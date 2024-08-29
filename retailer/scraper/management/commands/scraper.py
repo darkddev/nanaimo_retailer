@@ -21,7 +21,7 @@ class Command(BaseCommand):
                 "apikey": "c01ef3612328420c9f5cd9277e815a0e",
                 "apiroot": "https://apim.sportchek.ca",
             })
-        elif site_name == "deal_sportcheck":
+        elif site_name == "deal_sportchek":
             scraper = CandianTireScraper()
             scraper.set_settings({
                 "name": "sportchek",
@@ -35,7 +35,7 @@ class Command(BaseCommand):
                 "action": "deal",
                 "query" : "saleclearance",
                 "experience" : "sale|clearance",
-                "widgetid" : 1
+                "widgetid" : "1"
             })
         elif site_name == "partycity":
             scraper = CandianTireScraper()
@@ -98,6 +98,7 @@ class Command(BaseCommand):
                 "store": "365",
                 "apikey": "c01ef3612328420c9f5cd9277e815a0e",
                 "apiroot": "https://apim.canadiantire.ca",
+                "action":"deal",
                 "experience": "sale",
                 "hidefacets": "deals"
             })
@@ -124,6 +125,7 @@ class Command(BaseCommand):
                 "store": "7403",
                 "apikey": "c01ef3612328420c9f5cd9277e815a0e",
                 "apiroot": "https://apim.atmosphere.ca",
+                "action":"deal",
                 "experience" : "sale|clearance",
                 "widgetid" : "2jn4vze9"
             })
