@@ -17,7 +17,6 @@ class KmstoolsScraper:
         self.html_tree          = None
         self.categories         = []
         self.category_filters   = []
-        pass
 
     def set_settings(self, settings):
         for key in ["name", "domain", "url", "label"]:

@@ -20,6 +20,7 @@ class DealCandianTireScraper:
         self.product_count = 0
         self.site = None
         self.all_deals = []
+        self.temp_products_update= []
 
     def get_site_id(self, name):
         try:
@@ -32,8 +33,7 @@ class DealCandianTireScraper:
         found = False
 
         for item in self.all_deals:
-            if item.get("orig_id") == orig_id:
-                item.update({"is_deal":True})
+            if item.orig_id == orig_id:
                 found = True
                 break
         return found
@@ -49,17 +49,7 @@ class DealCandianTireScraper:
     def reverse_old_deals(self):
         self.site = self.get_site_id(self.settings["name"])
         old_deal_products = Product.objects.filter( site = self.site, is_deal = True )
-
-        for old_deal_product in old_deal_products:
-            self.all_deals.append(
-                {
-                    'orig_id' : old_deal_product.orig_id,
-                    'is_deal' : False,
-                    'skus' : old_deal_product.skus,
-                    'is_variant' : old_deal_product.is_variant,
-                    'variants' : old_deal_product.variants
-                }
-            )
+        self.all_deals.extend(old_deal_products)
 
     def get_product_response(self, url, max_retries = 5 , delay = 2):
         retries = 0
@@ -85,14 +75,14 @@ class DealCandianTireScraper:
             except requests.exceptions.RequestException as e:
                 print(f"Request failed: {e}")
             retries += 1
-            print(f"Retrying... ({retries}/{max_retries})")
+            print(f"PRODUCT:Retrying... ({retries}/{max_retries})")
             time.sleep(delay)
             
         print("Max retries reached. Could not get a successful response.")
         return None    
 
     def extract_products(self, page):
-        url = f"{self.settings["apiroot"]}{API_LOAD_PRODUCT}?store={self.settings['store']}"
+        url = f"{self.settings['apiroot']}{API_LOAD_PRODUCT}?store={self.settings['store']}"
 
         if page > 1:
             url += f";page={page}"
@@ -104,26 +94,19 @@ class DealCandianTireScraper:
             for product_info in result.get("products", []):
                 try:
                     orig_id = product_info["code"]
-                    if self.change_old2new_inlist(orig_id):
+                    is_exist = self.change_old2new_inlist(orig_id)
+                    
+                    if is_exist:
                         pass
                     else:
                         try:
                             product = Product.objects.get(site = self.site, orig_id=orig_id)
-                            self.all_deals.append(
-                                {
-                                    'orig_id' : orig_id,
-                                    'is_deal' : True,
-                                    'skus' : product.skus,
-                                    'is_variant' : product.is_variant,
-                                    'variants' : product.variants
-                                }
-                            )
+                            self.all_deals.append(product)
                         except Product.DoesNotExist:
                             pass
                 except Exception as e:
                     print (e)
                     continue
-
             return result["pagination"]["total"]
         else:
             return None
@@ -133,7 +116,7 @@ class DealCandianTireScraper:
         while retries < max_retries:
             try:
                 resp = requests.post(
-                    f"{self.settings["apiroot"]}{API_GET_PRICE}", 
+                    f"{self.settings['apiroot']}{API_GET_PRICE}", 
                     headers = {
                         "Ocp-Apim-Subscription-Key" : self.settings["apikey"],
                         "Basesiteid": self.settings["id"],
@@ -153,13 +136,13 @@ class DealCandianTireScraper:
             except requests.exceptions.RequestException as e:
                 print(f"Request failed: {e}")
             retries += 1
-            print(f"Retrying... ({retries}/{max_retries})")
+            print(f"PRICE:Retrying... ({retries}/{max_retries})")
             time.sleep(delay)
         print("Max retries reached. Could not get a successful response.")
         return None
 
-    def update_price(self, orig_id, pre_info):
-        skus = pre_info.get("skus").split(",")
+    def update_price(self, pre_info):
+        skus = pre_info.skus.split(",")
         sku_params = []
         for sku in skus:
             sku_params.append({"code": str(sku), "lowStockThreshold": "0"})
@@ -169,9 +152,9 @@ class DealCandianTireScraper:
         if result != None:
             try:
                 prods = result["skus"]
-                if pre_info.get("is_variant"):
+                if pre_info.is_variant:
                     try:
-                        old_variants = json.loads(pre_info["variants"].replace("'", '"'))
+                        old_variants = json.loads(pre_info.variants.replace("'", '"'))
                     except json.JSONDecodeError as e:
                         old_variants = []
                         
@@ -217,14 +200,17 @@ class DealCandianTireScraper:
                                     discount = new_discount
                                     
                                 new_variants.append(variant)
-
+                    self.product_count +=1
+                    
                     if discount >= 30:
-                        print(f"*** Deal Product : {pre_info.get('orig_id')} is more than 30% off. : Discount : {discount} : Flag : {pre_info.get("is_deal")}")
-                        Product.objects.filter(site = self.site, orig_id = pre_info.get("orig_id")).update(variants=json.dumps(new_variants), is_deal = pre_info.get("is_deal")) 
+                        print(f"*** {pre_info.orig_id} 30% off. : Discount : {discount} : Count : {self.product_count}")
+                        pre_info.variants = json.dumps(new_variants)
+                        pre_info.is_deal = True
                     else:
-                        Product.objects.filter(site = self.site, orig_id = pre_info.get("orig_id")).update(variants=json.dumps(new_variants), is_deal = False) 
-                        print(f"--- No Deal Product : {pre_info.get('orig_id')} : Discount : {discount}")
-                        
+                        pre_info.variants = json.dumps(new_variants)
+                        pre_info.is_deal = False
+                        print(f"--- No Deal : {pre_info.orig_id} : Discount : {discount} : Count : {self.product_count}")
+                    self.temp_products_update.append(pre_info)
                 else:
                     sku_value = prods[0]
                     if "originalPrice" in sku_value and sku_value["originalPrice"] is not None and "value" in sku_value["originalPrice"] and sku_value["originalPrice"]["value"] is not None:
@@ -255,29 +241,20 @@ class DealCandianTireScraper:
                                 discount = int(match.group(1))
                     except:
                         pass
-
+                    self.product_count +=1
                     if discount >= 30:
-                        print(f"*** Deal Product : {pre_info.get('orig_id')} is more than 30% off. : Discount : {discount}")
-                        Product.objects.filter(
-                            site=self.site,
-                            orig_id=pre_info.get("orig_id")
-                        ).update(
-                            regular_price = regular_price,
-                            sale_price = sale_price,
-                            stock = stock,
-                            is_deal = pre_info.get("is_deal")
-                        )
+                        print(f"*** Deal : {pre_info.orig_id} 30% off : Discount : {discount} : Count : {self.product_count}")
+                        pre_info.regular_price = regular_price
+                        pre_info.sale_price = sale_price
+                        pre_info.stock = stock
+                        pre_info.is_deal = True
                     else:
-                        Product.objects.filter(
-                            site=self.site,
-                            orig_id=pre_info.get("orig_id")
-                        ).update(
-                            regular_price = regular_price,
-                            sale_price = sale_price,
-                            stock = stock,
-                            is_deal = False
-                        )
-                        print(f"--- No Deal Product : {pre_info.get('orig_id')} : Discount : {discount}")
+                        pre_info.regular_price = regular_price
+                        pre_info.sale_price = sale_price
+                        pre_info.stock = stock
+                        pre_info.is_deal = False
+                        print(f"--- No Deal : {pre_info.orig_id} : Discount : {discount} : Count : {self.product_count}")
+                    self.temp_products_update.append(pre_info)
                 return True
             except:
                 return False
@@ -310,16 +287,22 @@ class DealCandianTireScraper:
 
             print("Update Price for All Deals")
 
-            for item in self.all_deals:
-                if item.get("is_deal"):
-                    print(f"+++ Update Price For New Deal : {item.get("orig_id")}")
-                    success = self.update_price(item["orig_id"], item)
+            for index, item in enumerate(self.all_deals, start=1):
+                if item.is_deal:
+                    print(f"+++ Update Price For Old Deal : {item.orig_id}")
+                    success = self.update_price(item)
                     if success == False:
-                        print(f"Failed : Update Price For New Deal : {item.get("orig_id")}")
+                        print(f"Failed : Update Price For New Deal : {item.orig_id}")
                 else:
-                    print(f"--- Update Price For Reversed Deal : {item.get("orig_id")}")
-                    success = self.update_price(item["orig_id"], item)
+                    print(f"--- Update Price For New Deal : {item.orig_id}")
+                    success = self.update_price(item)
                     if success == False:
-                        print(f"Failed : Update Price For New Deal : {item.get("orig_id")}")
-            
-            print(f"Updated Deals for site : {self.settings["domain"]}")
+                        print(f"Failed : Update Price For New Deal : {item.orig_id}")
+                
+                if index % 100 == 0:
+                    print(f"Bulk Update Deals")
+                    Product.objects.bulk_update(self.temp_products_update, ['sale_price', 'regular_price', 'stock', 'is_deal', 'variants'])
+                    self.temp_products_update.clear()
+                    
+            print(f"Updated Deals for site : {self.settings['domain']}")
+            self.product_count = 0

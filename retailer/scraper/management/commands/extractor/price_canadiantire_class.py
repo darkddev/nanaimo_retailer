@@ -40,7 +40,7 @@ class PriceCanadianTireScraper:
         while retries < max_retries:
             try:
                 resp = requests.post(
-                    f"{self.settings["apiroot"]}{API_GET_PRICE}", 
+                    f"{self.settings['apiroot']}{API_GET_PRICE}", 
                     headers = {
                         "Ocp-Apim-Subscription-Key" : self.settings["apikey"],
                         "Basesiteid": self.settings["id"],
@@ -60,14 +60,14 @@ class PriceCanadianTireScraper:
             except requests.exceptions.RequestException as e:
                 print(f"Request failed: {e}")
             retries += 1
-            print(f"Retrying... ({retries}/{max_retries})")
+            print(f"PRICE:Retrying... ({retries}/{max_retries})")
             time.sleep(delay)
         print("Max retries reached. Could not get a successful response.")
         return None
     
     def start(self):
         while True:
-            print(f"Updating Price for Site : {self.settings["domain"]}")
+            print(f"Updating Price for Site : {self.settings['domain']}")
             self.site = self.get_site(self.settings["name"])
             
             batch_size = 50
@@ -78,7 +78,11 @@ class PriceCanadianTireScraper:
                 products = Product.objects.filter(site = self.site).order_by('orig_id')[offset:offset+batch_size]
                 
                 for product in products:
-                    skus = product.skus.split(",")
+                    if product.is_variant:
+                        skus = product.skus.split(",")
+                    else:
+                        skus = product.skus.split(",")[:1]
+                        
                     bulk_skus.extend(skus)
                     
                 sku_params = []
@@ -92,12 +96,14 @@ class PriceCanadianTireScraper:
                     prods = result["skus"]
                     for product in products:
                         if product.is_variant:
-                            print(f"*** Product : {product.orig_id} is updated.  : Flag : {product.is_deal}")
+                            print(f"*** {product.orig_id} is updated.  : Deal : {product.is_deal}")
                             try:
                                 old_variants = json.loads(product.variants.replace("'", '"'))
                             except json.JSONDecodeError as e:
-                                old_variants = []     
+                                old_variants = [] 
+                                    
                             new_variants = []
+                            
                             try:
                                 for variant in old_variants:
                                     try:
@@ -122,31 +128,32 @@ class PriceCanadianTireScraper:
                                         continue
                             except Exception as e:
                                 print(e)
-                                print(f"SKUPARAMS : {len(sku_params)} : PRODS : {len(prods)}")
-                                return
+                                
                             product.variants = new_variants
                         else:
-                            print(f"*** Product : {product.orig_id} is updated.  : Flag : {product.is_deal}")
-                            sku_value = next((item for item in prods if item["code"] == product.skus.split(",")[0]), None)
-                            if "originalPrice" in sku_value and sku_value["originalPrice"] is not None and "value" in sku_value["originalPrice"] and sku_value["originalPrice"]["value"] is not None:
-                                regular_price = sku_value["originalPrice"]["value"]
-                            else:
-                                regular_price = 0
-                            if "currentPrice" in sku_value and "value" in sku_value["currentPrice"] and sku_value["currentPrice"]["value"] is not None:
-                                sale_price = sku_value["currentPrice"]["value"]
-                            else:
-                                sale_price = 0
-                            if "fulfillment" in sku_value and "availability" in sku_value["fulfillment"] and "Corporate" in sku_value["fulfillment"]["availability"] and "Quantity" in sku_value["fulfillment"]["availability"]["Corporate"]:
-                                stock = sku_value["fulfillment"]["availability"]["Corporate"]["Quantity"]
-                            elif "fulfillment" in sku_value and "availability" in sku_value["fulfillment"] and "quantity" in sku_value["fulfillment"]["availability"]:
-                                stock = sku_value["fulfillment"]["availability"]["Corporate"]["Quantity"]
-                            else:
-                                stock = 0
-
-                            product.regular_price = regular_price
-                            product.sale_price = sale_price
-                            product.stock = stock
+                            print(f"***{product.orig_id} is updated.  : Deal : {product.is_deal}")
+                            sku_value = next((item for item in prods if str(item["code"]) == product.skus.split(",")[0]), None)
+                            try:
+                                if "originalPrice" in sku_value and sku_value["originalPrice"] is not None and "value" in sku_value["originalPrice"] and sku_value["originalPrice"]["value"] is not None:
+                                    regular_price = sku_value["originalPrice"]["value"]
+                                else:
+                                    regular_price = 0
+                                if "currentPrice" in sku_value and "value" in sku_value["currentPrice"] and sku_value["currentPrice"]["value"] is not None:
+                                    sale_price = sku_value["currentPrice"]["value"]
+                                else:
+                                    sale_price = 0
+                                if "fulfillment" in sku_value and "availability" in sku_value["fulfillment"] and "Corporate" in sku_value["fulfillment"]["availability"] and "Quantity" in sku_value["fulfillment"]["availability"]["Corporate"]:
+                                    stock = sku_value["fulfillment"]["availability"]["Corporate"]["Quantity"]
+                                elif "fulfillment" in sku_value and "availability" in sku_value["fulfillment"] and "quantity" in sku_value["fulfillment"]["availability"]:
+                                    stock = sku_value["fulfillment"]["availability"]["Corporate"]["Quantity"]
+                                else:
+                                    stock = 0
                             
+                                product.regular_price = regular_price
+                                product.sale_price = sale_price
+                                product.stock = stock
+                            except:
+                                product.stock = 0
                     Product.objects.bulk_update(products, ['sale_price', 'regular_price', 'stock', 'variants'])
                 else:
                     continue
