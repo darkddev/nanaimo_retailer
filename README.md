@@ -1,2 +1,2 @@
-# wwmalls_retailer
-scraping project for wwmalls product, real-estate
+# nanaimo_retailers
+scraping project for nanaimo's ecommerce, real-estate websites
